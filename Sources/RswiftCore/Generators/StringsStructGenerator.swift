@@ -9,39 +9,53 @@
 
 import Foundation
 
-struct StringsStructGenerator: ExternalOnlyStructGenerator {
+struct StringsStructGenerator: StructGenerator {
   private let localizableStrings: [LocalizableStrings]
 
   init(localizableStrings: [LocalizableStrings]) {
     self.localizableStrings = localizableStrings
   }
 
-  func generatedStruct(at externalAccessLevel: AccessLevel, prefix: SwiftIdentifier) -> Struct {
-    let structName: SwiftIdentifier = "string"
-    let qualifiedName = prefix + structName
-    let localized = localizableStrings.grouped(by: { $0.filename })
-    let groupedLocalized = localized.grouped(bySwiftIdentifier: { $0.0 })
 
-    groupedLocalized.printWarningsForDuplicatesAndEmpties(source: "strings file", result: "file")
+    func generatedStructs(at externalAccessLevel: AccessLevel, prefix: SwiftIdentifier) -> (externalStruct: Struct, internalStruct: Struct?) {
+        let structName: SwiftIdentifier = "string"
+        let qualifiedName = prefix + structName
+        let localized = localizableStrings.grouped(by: { $0.filename })
+        let groupedLocalized = localized.grouped(bySwiftIdentifier: { $0.0 })
 
-    let structs = groupedLocalized.uniques.compactMap { arg -> Struct? in
-      let (key, value) = arg
-      return stringStructFromLocalizableStrings(filename: key, strings: value, at: externalAccessLevel, prefix: qualifiedName)
+        groupedLocalized.printWarningsForDuplicatesAndEmpties(source: "strings file", result: "file")
+
+        let structs = groupedLocalized.uniques.compactMap { arg -> Struct? in
+            let (key, value) = arg
+            return stringStructFromLocalizableStrings(filename: key, strings: value, at: externalAccessLevel, prefix: qualifiedName)
+        }
+        let externalStruct = Struct(
+            availables: [],
+            comments: ["This `\(qualifiedName)` struct is generated, and contains static references to \(groupedLocalized.uniques.count) localization tables."],
+            accessModifier: externalAccessLevel,
+            type: Type(module: .host, name: structName),
+            implements: [],
+            typealiasses: [],
+            properties: [],
+            functions: [],
+            structs: structs,
+            classes: []
+        )
+
+        let internalStruct = Struct(
+            availables: [],
+            comments: [],
+            accessModifier: externalAccessLevel,
+            type: Type(module: .host, name: structName),
+            implements: [],
+            typealiasses: [],
+            properties: [],
+            functions: [],
+            structs: [internalBundleStruct(name: "bundle", prefix: prefix, at: externalAccessLevel)],
+            classes: []
+        )
+        return (externalStruct, internalStruct)
     }
-
-    return Struct(
-      availables: [],
-      comments: ["This `\(qualifiedName)` struct is generated, and contains static references to \(groupedLocalized.uniques.count) localization tables."],
-      accessModifier: externalAccessLevel,
-      type: Type(module: .host, name: structName),
-      implements: [],
-      typealiasses: [],
-      properties: [],
-      functions: [],
-      structs: structs,
-      classes: []
-    )
-  }
 
   private func stringStructFromLocalizableStrings(filename: String, strings: [LocalizableStrings], at externalAccessLevel: AccessLevel, prefix: SwiftIdentifier) -> Struct? {
 
@@ -49,7 +63,14 @@ struct StringsStructGenerator: ExternalOnlyStructGenerator {
     let qualifiedName = prefix + structName
 
     let params = computeParams(filename: filename, strings: strings)
-
+    let bundelPropery = Let(
+        comments: ["Current bundle for localizable string"],
+        accessModifier: externalAccessLevel,
+        isStatic: true,
+        name: "current",
+        typeDefinition: .inferred(nil),
+        value: "_\(prefix).bundle.current()"
+    )
     return Struct(
       availables: [],
       comments: ["This `\(qualifiedName)` struct is generated, and contains static references to \(params.count) localization keys."],
@@ -57,12 +78,46 @@ struct StringsStructGenerator: ExternalOnlyStructGenerator {
       type: Type(module: .host, name: structName),
       implements: [],
       typealiasses: [],
-      properties: params.map { stringLet(values: $0, at: externalAccessLevel) },
+      properties: params.map { stringLet(values: $0, at: externalAccessLevel) } + [bundelPropery],
       functions: params.map { stringFunction(values: $0, at: externalAccessLevel) },
       structs: [],
       classes: []
     )
   }
+
+
+    private func internalBundleStruct(name: SwiftIdentifier, prefix: SwiftIdentifier, at externalAccessLevel: AccessLevel) -> Struct {
+        let qualifiedName = prefix + name
+        let body = [
+            "let language = UserDefaults.standard.string(forKey: R.appLanguageKey)",
+            "guard let path = R.hostingBundle.path(forResource: language, ofType: \".lproj\") else { return R.hostingBundle }",
+            "return Bundle(path: path) ?? R.hostingBundle"
+        ]
+        let currentFunction = Function(
+            availables: [],
+            comments: [],
+            accessModifier: externalAccessLevel,
+            isStatic: true,
+            name: "current",
+            generics: nil,
+            parameters: [],
+            doesThrow: false,
+            returnType: Type._Bundle,
+            body: body.joined(separator: "\n")
+        )
+        return Struct(
+            availables: [],
+            comments: ["This `\(qualifiedName)` struct is generated, and decides which bundle will be uesd for localizable string"],
+            accessModifier: .filePrivate,
+            type: Type(module: .host, name: name),
+            implements: [],
+            typealiasses: [],
+            properties: [],
+            functions: [currentFunction],
+            structs: [],
+            classes: []
+        )
+    }
 
   // Ahem, this code is a bit of a mess. It might need cleaning up... ;-)
   // Maybe when we pick up this issue: https://github.com/mac-cain13/R.swift/issues/136
