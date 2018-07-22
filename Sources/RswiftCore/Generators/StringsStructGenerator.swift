@@ -69,7 +69,8 @@ struct StringsStructGenerator: StructGenerator {
         isStatic: true,
         name: "current",
         typeDefinition: .inferred(nil),
-        value: "_\(prefix).bundle.current()"
+        value: "_\(prefix).bundle.current()",
+        mutable: true
     )
     return Struct(
       availables: [],

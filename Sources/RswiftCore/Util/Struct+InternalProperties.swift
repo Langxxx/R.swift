@@ -25,7 +25,8 @@ extension Struct {
         isStatic: true,
         name: "applicationLocale",
         typeDefinition: .inferred(Type._Locale),
-        value: "_R.string.bundle.current().preferredLocalizations.first.flatMap(Locale.init) ?? Locale.current"),
+        value: "_R.string.bundle.current().preferredLocalizations.first.flatMap(Locale.init) ?? Locale.current",
+        mutable: true),
       Let(
         comments: [],
         accessModifier: .internalLevel,
