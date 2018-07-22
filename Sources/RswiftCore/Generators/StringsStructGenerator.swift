@@ -25,10 +25,11 @@ struct StringsStructGenerator: StructGenerator {
 
         groupedLocalized.printWarningsForDuplicatesAndEmpties(source: "strings file", result: "file")
 
-        let structs = groupedLocalized.uniques.compactMap { arg -> Struct? in
+        let tableStructs = groupedLocalized.uniques.compactMap { arg -> Struct? in
             let (key, value) = arg
             return stringStructFromLocalizableStrings(filename: key, strings: value, at: externalAccessLevel, prefix: qualifiedName)
         }
+        let (bundleExternal, bundleInternal) = bundleStruct(name: "bundle", prefix: qualifiedName, at: externalAccessLevel)
         let externalStruct = Struct(
             availables: [],
             comments: ["This `\(qualifiedName)` struct is generated, and contains static references to \(groupedLocalized.uniques.count) localization tables."],
@@ -38,7 +39,7 @@ struct StringsStructGenerator: StructGenerator {
             typealiasses: [],
             properties: [],
             functions: [],
-            structs: structs,
+            structs: tableStructs + [bundleExternal],
             classes: []
         )
 
@@ -51,7 +52,7 @@ struct StringsStructGenerator: StructGenerator {
             typealiasses: [],
             properties: [],
             functions: [],
-            structs: [internalBundleStruct(name: "bundle", prefix: prefix, at: externalAccessLevel)],
+            structs: [bundleInternal],
             classes: []
         )
         return (externalStruct, internalStruct)
@@ -63,15 +64,6 @@ struct StringsStructGenerator: StructGenerator {
     let qualifiedName = prefix + structName
 
     let params = computeParams(filename: filename, strings: strings)
-    let bundelPropery = Let(
-        comments: ["Current bundle for localizable string"],
-        accessModifier: externalAccessLevel,
-        isStatic: true,
-        name: "current",
-        typeDefinition: .inferred(nil),
-        value: "_\(prefix).bundle.current()",
-        mutable: true
-    )
     return Struct(
       availables: [],
       comments: ["This `\(qualifiedName)` struct is generated, and contains static references to \(params.count) localization keys."],
@@ -79,7 +71,7 @@ struct StringsStructGenerator: StructGenerator {
       type: Type(module: .host, name: structName),
       implements: [],
       typealiasses: [],
-      properties: params.map { stringLet(values: $0, at: externalAccessLevel) } + [bundelPropery],
+      properties: params.map { stringLet(values: $0, at: externalAccessLevel) },
       functions: params.map { stringFunction(values: $0, at: externalAccessLevel) },
       structs: [],
       classes: []
@@ -87,8 +79,42 @@ struct StringsStructGenerator: StructGenerator {
   }
 
 
-    private func internalBundleStruct(name: SwiftIdentifier, prefix: SwiftIdentifier, at externalAccessLevel: AccessLevel) -> Struct {
+    private func bundleStruct(name: SwiftIdentifier, prefix: SwiftIdentifier, at externalAccessLevel: AccessLevel) -> (externalStruct: Struct, internalStruct: Struct) {
         let qualifiedName = prefix + name
+        let bundelPropery = Let(
+            comments: ["Current bundle for localizable string"],
+            accessModifier: .filePrivate,
+            isStatic: true,
+            name: "current",
+            typeDefinition: .inferred(nil),
+            value: "_\(qualifiedName).current()",
+            mutable: true
+        )
+        let updateFunction = Function(
+            availables: [],
+            comments: [],
+            accessModifier: externalAccessLevel,
+            isStatic: true,
+            name: "update",
+            generics: nil,
+            parameters: [],
+            doesThrow: false,
+            returnType: Type._Void,
+            body: "current = _R.string.bundle.current()\nR.applicationLocale = current.preferredLocalizations.first.flatMap(Locale.init) ?? Locale.current"
+        )
+        let externalStruct = Struct(
+            availables: [],
+            comments: ["This `\(qualifiedName)` struct is generated, and decides which bundle will be uesd for localizable string"],
+            accessModifier: externalAccessLevel,
+            type: Type(module: .host, name: name),
+            implements: [],
+            typealiasses: [],
+            properties: [bundelPropery],
+            functions: [updateFunction],
+            structs: [],
+            classes: []
+        )
+
         let body = [
             "let language = UserDefaults.standard.string(forKey: R.appLanguageKey)",
             "guard let path = R.hostingBundle.path(forResource: language, ofType: \".lproj\") else { return R.hostingBundle }",
@@ -97,7 +123,7 @@ struct StringsStructGenerator: StructGenerator {
         let currentFunction = Function(
             availables: [],
             comments: [],
-            accessModifier: externalAccessLevel,
+            accessModifier: .filePrivate,
             isStatic: true,
             name: "current",
             generics: nil,
@@ -106,10 +132,10 @@ struct StringsStructGenerator: StructGenerator {
             returnType: Type._Bundle,
             body: body.joined(separator: "\n")
         )
-        return Struct(
+        let internalStruct = Struct(
             availables: [],
             comments: ["This `\(qualifiedName)` struct is generated, and decides which bundle will be uesd for localizable string"],
-            accessModifier: .filePrivate,
+            accessModifier: externalAccessLevel,
             type: Type(module: .host, name: name),
             implements: [],
             typealiasses: [],
@@ -118,6 +144,7 @@ struct StringsStructGenerator: StructGenerator {
             structs: [],
             classes: []
         )
+        return (externalStruct, internalStruct)
     }
 
   // Ahem, this code is a bit of a mess. It might need cleaning up... ;-)
@@ -248,7 +275,7 @@ struct StringsStructGenerator: StructGenerator {
       isStatic: true,
       name: SwiftIdentifier(name: values.key),
       typeDefinition: .inferred(Type.StringResource),
-      value: "Rswift.StringResource(key: \"\(escapedKey)\", tableName: \"\(values.tableName)\", bundle: R.hostingBundle, locales: [\(locales)], comment: nil)"
+      value: "Rswift.StringResource(key: \"\(escapedKey)\", tableName: \"\(values.tableName)\", bundle: R.string.bundle.current, locales: [\(locales)], comment: nil)"
     )
   }
 
@@ -335,7 +362,7 @@ private struct StringValues {
     }
 
     if tableName == "Localizable" {
-      return "NSLocalizedString(\"\(escapedKey)\", bundle: R.hostingBundle\(valueArgument), comment: \"\")"
+      return "NSLocalizedString(\"\(escapedKey)\", bundle: R.string.bundle.current\(valueArgument), comment: \"\")"
     }
     else {
       return "NSLocalizedString(\"\(escapedKey)\", tableName: \"\(tableName)\", bundle: R.hostingBundle\(valueArgument), comment: \"\")"
