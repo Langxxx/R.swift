@@ -25,7 +25,14 @@ extension Struct {
         isStatic: true,
         name: "applicationLocale",
         typeDefinition: .inferred(Type._Locale),
-        value: "hostingBundle.preferredLocalizations.first.flatMap(Locale.init) ?? Locale.current")
+        value: "_R.string.bundle.current().preferredLocalizations.first.flatMap(Locale.init) ?? Locale.current"),
+      Let(
+        comments: [],
+        accessModifier: .internalLevel,
+        isStatic: true,
+        name: "appLanguageKey",
+        typeDefinition: .inferred(Type._String),
+        value: "\"appLanguage\""),
     ]
 
     let internalClasses = [
