@@ -37,7 +37,7 @@ struct NibStructGenerator: StructGenerator {
 
   private let instantiateParameters = [
     Function.Parameter(name: "owner", localName: "ownerOrNil", type: Type._AnyObject.asOptional()),
-    Function.Parameter(name: "options", localName: "optionsOrNil", type: Type(module: .stdLib, name: SwiftIdentifier(rawValue: "[UINib.OptionsKey : Any]"), optional: true), defaultValue: "nil")
+    Function.Parameter(name: "options", localName: "optionsOrNil", type: Type(module: .stdLib, name: SwiftIdentifier(rawValue: "[NSObject : Any]"), optional: true), defaultValue: "nil")
   ]
 
   init(nibs: [Nib]) {
@@ -74,7 +74,7 @@ struct NibStructGenerator: StructGenerator {
         let qualifiedCurrentNibName = qualifiedName + SwiftIdentifier(name: nib.name)
 
         let deprecatedFunction = Function(
-          availables: ["*, deprecated, message: \"Use UINib(resource: \(qualifiedCurrentNibName)) instead\""],
+          availables: [],
           comments: ["`UINib(name: \"\(nib.name)\", in: bundle)`"],
           accessModifier: externalAccessLevel,
           isStatic: true,
@@ -88,22 +88,22 @@ struct NibStructGenerator: StructGenerator {
           body: "return UIKit.UINib(resource: \(qualifiedCurrentNibName))"
         )
 
-        guard let firstViewInfo = nib.rootViews.first else { return [deprecatedFunction] }
+//        guard let firstViewInfo = nib.rootViews.first else { return [deprecatedFunction] }
 
-        let newFunction = Function(
-          availables: [],
-          comments: [],
-          accessModifier: externalAccessLevel,
-          isStatic: true,
-          name: SwiftIdentifier(name: nib.name),
-          generics: nil,
-          parameters: instantiateParameters,
-          doesThrow: false,
-          returnType: firstViewInfo.asOptional(),
-          body: "return \(qualifiedCurrentNibName).instantiate(withOwner: ownerOrNil, options: optionsOrNil)[0] as? \(firstViewInfo)"
-        )
+//        let newFunction = Function(
+//          availables: [],
+//          comments: [],
+//          accessModifier: externalAccessLevel,
+//          isStatic: true,
+//          name: SwiftIdentifier(name: nib.name),
+//          generics: nil,
+//          parameters: instantiateParameters,
+//          doesThrow: false,
+//          returnType: firstViewInfo.asOptional(),
+//          body: "return \(qualifiedCurrentNibName).instantiate(withOwner: ownerOrNil, options: optionsOrNil)[0] as? \(firstViewInfo)"
+//        )
 
-        return [deprecatedFunction, newFunction]
+        return [deprecatedFunction]
       }
 
     let externalStruct = Struct(
