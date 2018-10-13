@@ -116,7 +116,7 @@ struct StringsStructGenerator: StructGenerator {
         )
 
         let body = [
-            "let language = UserDefaults.standard.string(forKey: R.appLanguageKey)",
+            "guard let language = UserDefaults.standard.string(forKey: R.appLanguageKey) else { return R.hostingBundle }",
             "guard let path = R.hostingBundle.path(forResource: language, ofType: \".lproj\") else { return R.hostingBundle }",
             "return Bundle(path: path) ?? R.hostingBundle"
         ]
